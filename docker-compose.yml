@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # FastAPI Application
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - DATABASE_URL=postgresql://fictopia:fictopia@postgres:5432/fictopia
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+    depends_on:
+      - postgres
+      - redis
+      - ollama
+    volumes:
+      - ./:/app
+    networks:
+      - fictopia_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=fictopia
+      - POSTGRES_PASSWORD=fictopia
+      - POSTGRES_DB=fictopia
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - fictopia_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fictopia"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - fictopia_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Ollama (Offline AI)
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - fictopia_network
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    # Note: You need to run `ollama pull mistral` after starting
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+  ollama_data:
+
+networks:
+  fictopia_network:
+    driver: bridge
